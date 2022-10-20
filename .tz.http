@@ -1,0 +1,12 @@
+@baseURL = http://127.0.0.1:8888
+
+GET {{baseURL}}
+
+###
+
+POST {{baseURL}}/users HTTP/1.1
+Content-Type: application/json
+
+{
+    "username": "tian"
+}

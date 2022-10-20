@@ -1,0 +1,16 @@
+[package]
+name = "test-axum"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.5.16", features = ["headers"] }
+mini-redis = "0.4"
+serde = { version = "1.0.144", features = ["derive"] }
+jsonwebtoken = "8"
+tower = { version = "0.4.13", features = ["timeout"] }
+tower-layer = "0.3.2"
+tower-service = "0.3.2"
