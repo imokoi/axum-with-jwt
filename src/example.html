@@ -1,0 +1,31 @@
+<html>
+
+<head>
+    <title>Websocket</title>
+</head>
+
+<body>
+    <script>
+        let ws = new WebSocket("ws://localhost:8888/ws");
+
+        ws.onmessage = function (event) {
+            console.log(event.data);
+        };
+
+        ws.onopen = function (event) {
+            ws.send("Hello");
+        };
+
+        ws.onclose = function (event) {
+            console.log("Connection closed");
+        };
+
+        ws.onerror = function (event) {
+            console.log(event);
+        };
+    </script>
+    <h1>Example</h1>
+    <p>Example</p>
+</body>
+
+</html>

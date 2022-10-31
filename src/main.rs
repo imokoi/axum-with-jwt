@@ -1,8 +1,15 @@
 extern crate core;
 
+use std::borrow::{Borrow, BorrowMut};
+use std::cell::RefCell;
+use std::collections::HashSet;
+use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
 use axum::error_handling::HandleErrorLayer;
+use axum::extract::ws::{Message, WebSocket};
+use axum::extract::WebSocketUpgrade;
 use axum::headers::authorization::Bearer;
 use axum::headers::Authorization;
 use axum::http::{Request, StatusCode};
@@ -10,15 +17,28 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{http, middleware, BoxError, Extension, Json, Router, TypedHeader};
+use futures::{sink::SinkExt, stream::StreamExt};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use tokio::sync::{broadcast, mpsc, Mutex};
 use tower::timeout::TimeoutLayer;
 use tower::ServiceBuilder;
 
 static SECRET: &str = "Hello, world!";
 
+// Our shared state
+struct AppState {
+    user_set: Mutex<HashSet<String>>,
+    tx: broadcast::Sender<String>,
+}
+
 #[tokio::main]
 async fn main() {
+    let app_state = Arc::new(AppState {
+        user_set: Mutex::new(HashSet::new()),
+        tx: broadcast::channel(2048).0,
+    });
+
     let app = Router::new()
         .route("/login", post(login))
         .route("/get_data_without_auth", get(get_data_without_auth))
@@ -29,12 +49,65 @@ async fn main() {
                 .layer(HandleErrorLayer::new(handle_error))
                 .layer(TimeoutLayer::new(Duration::from_secs(10))),
         )
-        .route("/ping", get(ping));
+        .route("/ping", get(ping))
+        .route("/ws", get(handle_websocket))
+        .layer(Extension(app_state));
 
     axum::Server::bind(&"0.0.0.0:8888".parse().unwrap())
         .serve(app.into_make_service())
         .await
         .unwrap();
+}
+
+async fn handle_websocket(
+    ws: WebSocketUpgrade,
+    Extension(app_state): Extension<Arc<AppState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(|stream| async move {
+        let (tx, mut rx) = stream.split();
+
+        // we need to send ping message to client every 10 seconds
+        let arc_tx = Arc::new(Mutex::new(tx));
+        let tx1 = arc_tx.clone();
+        tokio::spawn(async move {
+            loop {
+                thread::sleep(Duration::from_secs(10));
+                let message = Message::Ping("ping".into());
+                let mut sender = tx1.lock().await;
+                match sender.send(message).await {
+                    Ok(_) => {
+                        println!("sent ping");
+                    }
+                    Err(e) => {
+                        println!("send error: {}", e);
+                        break;
+                    }
+                };
+            }
+        });
+
+        let tx2 = arc_tx.clone();
+        while let Some(Ok(message)) = rx.next().await {
+            let mut sender = tx2.lock().await;
+            // handle messages from the client
+            match message {
+                Message::Text(text) => {
+                    let mut user_set = app_state.user_set.lock().await;
+                    user_set.insert(text.clone());
+                    let message = Message::Text(text.into());
+                    sender.send(message).await.unwrap();
+                }
+                Message::Pong(_) => {
+                    println!("received pong");
+                }
+                Message::Close(_) => {
+                    println!("Websocket connection closed");
+                    break;
+                }
+                _ => {}
+            }
+        }
+    })
 }
 
 async fn ping() -> &'static str {

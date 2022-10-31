@@ -7,10 +7,11 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-axum = { version = "0.5.16", features = ["headers"] }
+axum = { version = "0.5.16", features = ["headers", "ws"] }
 mini-redis = "0.4"
 serde = { version = "1.0.144", features = ["derive"] }
 jsonwebtoken = "8"
 tower = { version = "0.4.13", features = ["timeout"] }
 tower-layer = "0.3.2"
 tower-service = "0.3.2"
+futures = "0.3"
